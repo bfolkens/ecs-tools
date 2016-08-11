@@ -1,0 +1,59 @@
+#!/bin/bash
+#
+# Usage: ./ecs-host profile-name cluster-name service-name
+#
+
+display_usage() {
+	echo "Retrieve ip address for service name."
+	echo -e "\nusage: `basename $0` [-1h] -p profile-name -c cluster-name -s service-name"
+}
+
+# if less than two arguments supplied, display usage
+if [  $# -le 1 ]
+then
+	display_usage
+	exit 1
+fi
+
+# options were specified
+while getopts "1hp:c:s:" opt; do
+ case $opt in
+	 1)
+     single_output_mode=true
+		 ;;
+	 p)
+	   profile=$OPTARG
+		 ;;
+	 c)
+	   cluster=$OPTARG
+		 ;;
+	 s)
+	   service_name=$OPTARG
+		 ;;
+	 h)
+	   display_usage
+		 exit 1
+		 ;;
+	 \?)
+		 echo "Invalid option: -$OPTARG" >&2
+		 exit 1
+		 ;;
+ esac
+done
+
+# Script
+
+containerInstanceArns=$((aws ecs list-tasks --profile=${profile} --cluster=${cluster} --query=taskArns --output text | xargs aws ecs describe-tasks --profile=${profile} --cluster=${cluster} --query "tasks[]" --tasks) | jq -r ".[] | select(.containers[].name | contains(\"${service_name}\")) | .containerInstanceArn" | tr '\n' ' ')
+
+for containerInstanceArn in $containerInstanceArns; do
+  ec2InstanceId=$(aws ecs describe-container-instances --profile=${profile} --cluster=${cluster} --container-instances=${containerInstanceArn} | jq -r '.containerInstances[].ec2InstanceId')
+	ec2PublicIp=$(aws ec2 describe-instances --profile=${profile} --instance=${ec2InstanceId} | jq -r ".Reservations[].Instances[].NetworkInterfaces[].Association.PublicIp")
+	ec2PublicIps="${ec2PublicIps} ${ec2PublicIp}"
+done
+
+if [[ $single_output_mode ]]
+then
+	echo $ec2PublicIp
+else
+	echo $ec2PublicIps
+fi
