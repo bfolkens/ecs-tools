@@ -45,15 +45,14 @@ done
 
 containerInstanceArns=$((aws ecs list-tasks --profile=${profile} --cluster=${cluster} --query=taskArns --output text | xargs aws ecs describe-tasks --profile=${profile} --cluster=${cluster} --query "tasks[]" --tasks) | jq -r ".[] | select(.containers[].name | contains(\"${service_name}\")) | .containerInstanceArn" | tr '\n' ' ')
 
-for containerInstanceArn in $containerInstanceArns; do
-  ec2InstanceId=$(aws ecs describe-container-instances --profile=${profile} --cluster=${cluster} --container-instances=${containerInstanceArn} | jq -r '.containerInstances[].ec2InstanceId')
-	ec2PublicIp=$(aws ec2 describe-instances --profile=${profile} --instance=${ec2InstanceId} | jq -r ".Reservations[].Instances[].NetworkInterfaces[].Association.PublicIp")
-	ec2PublicIps="${ec2PublicIps} ${ec2PublicIp}"
-done
+ec2InstanceIds=$(aws ecs describe-container-instances --profile ${profile} --cluster ${cluster} --container-instances ${containerInstanceArns} | jq -r '.containerInstances[].ec2InstanceId')
+ec2PublicIps=$(aws ec2 describe-instances --profile ${profile} --instance-ids ${ec2InstanceIds} | jq -r ".Reservations[].Instances[].NetworkInterfaces[].Association.PublicIp")
 
 if [[ $single_output_mode ]]
 then
-	echo $ec2PublicIp
+  ec2PublicIps_array=( $ec2PublicIps )
+	echo ${ec2PublicIps_array[0]}
 else
 	echo $ec2PublicIps
 fi
+
